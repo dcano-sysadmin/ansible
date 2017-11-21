@@ -1,0 +1,207 @@
+- name: Add Group "{{group_name}}" group
+  group:
+    name: "{{group_name}}"
+    state: present
+    system: no
+
+- name: Create user "{{user_name}}"
+  user:
+    name: "{{user_name}}"
+    group: "{{group_name}}"
+    password: "{{user_password}}"
+    state: present
+
+- name: Add admin group to sudo
+  lineinfile: "dest=/etc/sudoers regexp='^%{{ group_name }}} ALL' line='%{{ group_name }} ALL=(ALL) NOPASSWD: ALL' state=present"
+
+- name: Create hdfs folder
+  file:
+    path: "{{hdfs_folder}}"
+    state: directory
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
+    mode: 0775
+    recurse: yes
+
+- name: Install packages
+  package:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - wget
+    - rsync
+
+- name: Build hosts file
+  lineinfile:
+    dest: /etc/hosts
+    regexp: '.*{{ item }}$'
+    line: "{{ hostvars[item]['ansible_eth1']['ipv4']['address'] }}   {{ hostvars[item]['ansible_hostname'] }}"
+    state: present
+  with_items: 
+    - '{{ groups["hdfsmasters"] }}'
+    - '{{ groups["hdfsslaves"] }}'
+
+- name: Generate ssh key for "{{ user_name }}"
+  user:
+    name: "{{ user_name }}"
+    generate_ssh_key: yes
+    ssh_key_bits: 2048
+    ssh_key_file: "/home/{{user_name}}/.ssh/id_rsa"
+
+- name: Create authorized_keys
+  file:
+    path: /home/{{ user_name }}/.ssh/authorized_keys
+    owner: "{{ user_name }}"
+    group: "{{ user_name }}"
+    state: touch
+    mode: 0644
+
+- name: Create authorized_keys
+  file:
+    path: /home/{{ user_name }}/.ssh/known_hosts
+    owner: "{{ user_name }}"
+    group: "{{ user_name }}"
+    state: touch
+    mode: 0644
+
+- name: Add generated ssh key to authorized_keys for {{ user_name }}
+  shell: cat /home/{{ user_name }}/.ssh/id_rsa.pub >> /home/{{ user_name }}/.ssh/authorized_keys
+  when: inventory_hostname in groups['hdfsmasters']
+
+- name: Add host to known_hosts
+  shell: ssh-keyscan -H 127.0.0.1 >> /home/{{ user_name }}/.ssh/known_hosts && ssh-keyscan -H localhost >> /home/{{ user_name }}/.ssh/known_hosts && ssh-keyscan -H 0.0.0.0 >> /home/{{ user_name }}/.ssh/known_hosts
+  when: inventory_hostname in groups['hdfsmasters']
+
+- name: fetch all public ssh keys
+  shell: cat /home/{{ user_name }}/.ssh/id_rsa.pub
+  register: ssh_keys
+  when: inventory_hostname in groups['hdfsmasters']
+
+- name: Deploy keys on all servers
+  authorized_key:
+    user: "{{user_name}}"
+    key: "{{item[0]}}"
+  delegate_to: "{{item[1]}}"
+  with_nested:
+    - "{{ssh_keys.stdout}}"
+    - "{{groups['hdfsslaves']}}"
+  when: inventory_hostname in groups['hdfsmasters']
+
+- name: Accept fingerprint
+  shell: ssh-keyscan -H {{item}} >> /home/{{ user_name }}/.ssh/known_hosts
+  become_user: "{{ user_name }}"
+  with_items: "{{groups['hdfsslaves']}} + {{groups['hdfsmasters']}}"
+
+- name: Check that java is download
+  stat:
+    path: '/hdfs/jdk-8u151-linux-x64.rpm'
+  register: java_is_download
+
+- name: Download Java Oracle
+  shell: "wget -O {{ hdfs_folder }}/jdk-8u151-linux-x64.rpm --no-cookies --no-check-certificate --header 'Cookie: gpw_e24=http%3A%2F%2Fwww.oracle.com%2F; oraclelicense=accept-securebackup-cookie' 'http://download.oracle.com/otn-pub/java/jdk/8u151-b12/e758a0de34e24606bca991d704f6dcbf/jdk-8u151-linux-x64.rpm'"
+  when: java_is_download.stat.exists == False
+
+- name: Install Java Oracle
+  yum:
+    name: "{{ hdfs_folder }}/jdk-8u151-linux-x64.rpm"
+    state: present
+
+- name: Check that hadoop is download
+  stat:
+    path: '{{ hdfs_folder }}/hadoop.tar.gz'
+  register: hadoop_is_download
+
+- name: Download hadoop
+  get_url:
+    url: http://mirror.rise.ph/apache/hadoop/common/stable/hadoop-2.9.0.tar.gz
+    dest: "{{ hdfs_folder }}/hadoop.tar.gz"
+    mode: 0666
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
+    force: no
+  when: hadoop_is_download.stat.exists == False
+
+- name: Check that hadoop directory exists
+  stat:
+    path: /opt/hadoop
+  register: hadoop_directory
+
+- name: Extract hadoop tar
+  unarchive:
+    src: "{{ hdfs_folder }}/hadoop.tar.gz"
+    dest: /opt/
+    remote_src: yes
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
+  when: hadoop_directory.stat.exists == False
+
+- name: Rename hadoop directory
+  shell: "mv /opt/hadoop-2.9.0 /opt/hadoop"
+  when: hadoop_directory.stat.exists == False
+
+- name: Register Java_home
+  stat:
+    path: /usr/java/jdk1.8.0_151/bin
+  register: java_home
+
+- blockinfile:
+    path: /home/{{ user_name }}/.bash_profile
+    content: |
+      export JAVA_HOME=/usr/java/jdk1.8.0_151/jre
+      export PATH=$PATH:$JAVA_HOME/bin
+      export CLASSPATH=.:$JAVA_HOME/jre/lib:$JAVA_HOME/lib:$JAVA_HOME/lib/tools.jar
+      export HADOOP_HOME=/opt/hadoop
+      export HADOOP_INSTALL=$HADOOP_HOME
+      export HADOOP_MAPRED_HOME=$HADOOP_HOME
+      export HADOOP_COMMON_HOME=$HADOOP_HOME
+      export HADOOP_HDFS_HOME=$HADOOP_HOME
+      export YARN_HOME=$HADOOP_HOME
+      export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
+      export PATH=$PATH:$HADOOP_HOME/sbin:$HADOOP_HOME/bin
+
+- name: Source bash_profile of {{ user_name }}
+  shell: source /home/{{ user_name }}/.bash_profile
+ 
+- name: Create directory hadoopdata
+  file:
+    path: /opt/hadoop/hadoopdata
+    state: directory
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
+
+- name: Create directory namenode
+  file:
+    path: /opt/hadoop/hadoopdata/namenode
+    state: directory
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
+
+- name: Create directory datanode
+  file:
+    path: /opt/hadoop/hadoopdata/datanode
+    state: directory
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
+
+- name: Copy necessary files
+  template:
+    src: "{{ item }}.template"
+    dest: "/opt/hadoop/etc/hadoop/{{ item }}"
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
+  with_items:
+    - hadoop-env.sh
+    - core-site.xml
+    - hdfs-site.xml
+    - yarn-site.xml
+    - mapred-site.xml
+
+# hdfs namenode -format
+# start-dfs.sh
+# start-yarn.sh
+#
+# jps
+# localhost:50070
+# localhost:8088
+# 50075/datanode
+# 50070 namenode
