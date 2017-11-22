@@ -1,0 +1,14 @@
+*.retry
+*.rpm
+*.deb
+*.tgz
+*.tar.gz
+*.zip
+*.linux-amd64
+*-linux-amd64
+*.linux-386
+*-linux-386
+*.sql
+*.auxtxt
+*.cypher
+*.bin

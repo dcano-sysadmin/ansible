@@ -21,7 +21,7 @@
     {% if loop.first %}
     <property>
       <name>fs.defaultFS</name>
-      <value>hdfs://{{hostvars[host]['ansible_hostname']}}:9000</value>
+      <value>hdfs://0.0.0.0:9000</value>
     </property>
     {% endif %}
     {% endfor %}

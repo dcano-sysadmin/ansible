@@ -97,47 +97,78 @@
     path: '/hdfs/jdk-8u151-linux-x64.rpm'
   register: java_is_download
 
-- name: Download Java Oracle
-  shell: "wget -O {{ hdfs_folder }}/jdk-8u151-linux-x64.rpm --no-cookies --no-check-certificate --header 'Cookie: gpw_e24=http%3A%2F%2Fwww.oracle.com%2F; oraclelicense=accept-securebackup-cookie' 'http://download.oracle.com/otn-pub/java/jdk/8u151-b12/e758a0de34e24606bca991d704f6dcbf/jdk-8u151-linux-x64.rpm'"
-  when: java_is_download.stat.exists == False
+- name: Ensure folder {{role_path}}/files/ exists
+  local_action: file path="{{role_path}}/files" state=directory
+  become: no
+
+- name: Check if Java Oracle is downloaded
+  local_action: stat path={{role_path}}/files/{{ java_rpm_name }}
+  run_once: yes
+  become: no
+  register: java_oracle_file
+
+- name: Download Java Oracle locally
+  local_action: "shell wget -O {{role_path}}/files/{{ java_rpm_name }} --no-cookies --no-check-certificate --header 'Cookie: gpw_e24=http%3A%2F%2Fwww.oracle.com%2F; oraclelicense=accept-securebackup-cookie' 'http://download.oracle.com/otn-pub/java/jdk/8u151-b12/e758a0de34e24606bca991d704f6dcbf/jdk-8u151-linux-x64.rpm'"
+  run_once: yes
+  become: no
+  when: not java_oracle_file.stat.exists
+
+- name: Check Java
+  shell: command -v java
+  register: check_java
+  ignore_errors: True
+
+- name: Copy Java rpm locally to server
+  copy:
+    src: ../files/{{ java_rpm_name }}
+    dest: /opt/
+    owner: "{{ user_name }}"
+    group: "{{ group_name}}"
+    mode: 0644
+  when: ansible_os_family == 'RedHat' and check_java.rc > 0
 
 - name: Install Java Oracle
   yum:
-    name: "{{ hdfs_folder }}/jdk-8u151-linux-x64.rpm"
+    name: "/opt/{{ java_rpm_name }}"
     state: present
+  when: ansible_os_family == 'RedHat' and check_java.rc > 0
 
 - name: Check that hadoop is download
   stat:
     path: '{{ hdfs_folder }}/hadoop.tar.gz'
   register: hadoop_is_download
 
-- name: Download hadoop
-  get_url:
-    url: http://mirror.rise.ph/apache/hadoop/common/stable/hadoop-2.9.0.tar.gz
-    dest: "{{ hdfs_folder }}/hadoop.tar.gz"
-    mode: 0666
-    owner: "{{ user_name }}"
-    group: "{{ group_name }}"
-    force: no
-  when: hadoop_is_download.stat.exists == False
+- name: Check if hadoop is downloaded
+  local_action: stat path={{role_path}}/files/{{ hadoop_package }}.tar.gz
+  run_once: yes
+  become: no
+  register: hadoop_file
 
-- name: Check that hadoop directory exists
+- name: Download hadoop local
+  local_action: get_url url={{ hadoop_download_url }} dest={{role_path}}/files/{{ hadoop_package }}.tar.gz timeout=100
+  run_once: yes
+  become: no
+  when: not hadoop_file.stat.exists
+  register: hadoop_downloaded
+
+- name: Fail if hadoop not found
+  fail: msg="{{role_path}}/files/{{ hadoop_package }}.tar.gz does NOT exist! Aborting..."
+  run_once: yes
+  when: hadoop_downloaded|failed
+
+- name: Check if hadoop directory exists
   stat:
-    path: /opt/hadoop
-  register: hadoop_directory
+    path: '{{ hadoop_directory }}'
+  register: hadoop_directory_exists
 
-- name: Extract hadoop tar
-  unarchive:
-    src: "{{ hdfs_folder }}/hadoop.tar.gz"
-    dest: /opt/
-    remote_src: yes
-    owner: "{{ user_name }}"
-    group: "{{ group_name }}"
-  when: hadoop_directory.stat.exists == False
+- name: Unpack hadoop
+  unarchive: copy=yes src={{role_path}}/files/{{ hadoop_package }}.tar.gz dest=/opt/
+  become: yes
+  when: not hadoop_directory_exists.stat.exists
 
-- name: Rename hadoop directory
-  shell: "mv /opt/hadoop-2.9.0 /opt/hadoop"
-  when: hadoop_directory.stat.exists == False
+- name: Rename directory zookeeper
+  shell: "mv /opt/{{ hadoop_package }} {{ hadoop_directory }}" 
+  when: not hadoop_directory_exists.stat.exists
 
 - name: Register Java_home
   stat:
@@ -195,6 +226,41 @@
     - hdfs-site.xml
     - yarn-site.xml
     - mapred-site.xml
+    - slaves
+
+### INSTALL ZOOKEEPER
+- name: Check if zookeeper is downloaded
+  local_action: stat path={{role_path}}/files/{{ zookeeper_package }}.tar.gz
+  run_once: yes
+  become: no
+  register: zookeeper_file
+
+- name: Download zookeper local
+  local_action: get_url url={{zookeper_download_url}} dest={{role_path}}/files/{{ zookeeper_package }}.tar.gz timeout=100
+  run_once: yes
+  become: no
+  when: not zookeeper_file.stat.exists
+  register: zookeeper_downloaded
+
+- name: Fail if zookeeper not found
+  fail: msg="{{role_path}}/files/{{ zookeeper_package }}.tar.gz does NOT exist! Aborting..."
+  run_once: yes
+  when: zookeeper_downloaded|failed
+
+- name: Check if zookeeper directory exists
+  stat:
+    path: '{{ zookeeper_directory }}'
+  register: zookeeper_directory_exists
+
+- name: Unpack zookeeper
+  unarchive: copy=yes src={{role_path}}/files/{{ zookeeper_package }}.tar.gz dest=/opt/
+  become: yes
+  when: not zookeeper_directory_exists.stat.exists
+
+- name: Rename directory zookeeper
+  shell: "mv /opt/{{ zookeeper_package }} {{ zookeeper_directory }}" 
+  when: not zookeeper_directory_exists.stat.exists
+
 
 # hdfs namenode -format
 # start-dfs.sh
