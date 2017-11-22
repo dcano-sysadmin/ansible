@@ -10,5 +10,24 @@ hadoop_package: "hadoop-2.9.0"
 hadoop_download_url: "http://mirror.rise.ph/apache/hadoop/common/stable/{{ hadoop_package }}.tar.gz"
 hadoop_directory: "/opt/hadoop"
 zookeeper_package: "zookeeper-3.4.10"
-zookeeper_download_url: "http://apache.rediris.es/zookeeper/stable/{{ zookeeper_package }}"
+zookeeper_download_url: "http://apache.rediris.es/zookeeper/stable/{{ zookeeper_package }}.tar.gz"
 zookeeper_directory: "/opt/zookeeper"
+datanode_directory: "{{ hdfs_folder }}/datanode"
+namenode_directory: "{{ hdfs_folder }}/namenode"
+journalnode_directory: "{{ hdfs_folder }}/journalnode"
+
+##dfs_namenode_name_dir: "{{hdfs_data_dir}}/namenode"
+#  <property>
+#    <name>dfs.namenode.name.dir</name>
+#    <value>{{ dfs_namenode_name_dir }}</value>
+#  </property>
+##dfs_datanode_data_dir: "{{hdfs_data_dir}}/datanode"
+#  <property>
+#    <name>dfs.datanode.data.dir</name>
+#    <value>{{ dfs_datanode_data_dir }}</value>
+#  </property>
+##dfs_journalnode_journal_dir: "{{hdfs_data_dir}}/journalnode"
+#  <property>
+#    <name>dfs.journalnode.edits.dir</name>
+#    <value>{{ dfs_journalnode_journal_dir }}</value>
+#  </property>

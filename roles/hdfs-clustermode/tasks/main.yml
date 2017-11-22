@@ -1,3 +1,6 @@
+##############################
+###### ADD USER, ADD GROUP, CONFIGURE HOSTS, CONFIGURE SSH
+##############################
 - name: Add Group "{{group_name}}" group
   group:
     name: "{{group_name}}"
@@ -13,23 +16,6 @@
 
 - name: Add admin group to sudo
   lineinfile: "dest=/etc/sudoers regexp='^%{{ group_name }}} ALL' line='%{{ group_name }} ALL=(ALL) NOPASSWD: ALL' state=present"
-
-- name: Create hdfs folder
-  file:
-    path: "{{hdfs_folder}}"
-    state: directory
-    owner: "{{ user_name }}"
-    group: "{{ group_name }}"
-    mode: 0775
-    recurse: yes
-
-- name: Install packages
-  package:
-    name: "{{ item }}"
-    state: latest
-  with_items:
-    - wget
-    - rsync
 
 - name: Build hosts file
   lineinfile:
@@ -92,6 +78,55 @@
   become_user: "{{ user_name }}"
   with_items: "{{groups['hdfsslaves']}} + {{groups['hdfsmasters']}}"
 
+##############################
+###### CREATE DIRECTORIES
+##############################
+- name: Create hdfs folder
+  file:
+    path: "{{hdfs_folder}}"
+    state: directory
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
+    mode: 0775
+    recurse: yes
+- name: Create datanode folder
+  file:
+    path: "{{hdfs_folder}}"
+    state: directory
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
+    mode: 0775
+    recurse: yes
+
+- name: Create namenode folder
+  file:
+    path: "{{hdfs_folder}}"
+    state: directory
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
+    mode: 0775
+    recurse: yes
+
+- name: Create journalnode folder
+  file:
+    path: "{{hdfs_folder}}"
+    state: directory
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
+    mode: 0775
+    recurse: yes
+
+##############################
+###### INSTALL NECCESARY PACKAGES
+##############################
+- name: Install packages
+  package:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - wget
+    - rsync
+
 - name: Check that java is download
   stat:
     path: '/hdfs/jdk-8u151-linux-x64.rpm'
@@ -133,6 +168,10 @@
     state: present
   when: ansible_os_family == 'RedHat' and check_java.rc > 0
 
+##############################
+###### INSTALL HADOOP
+##############################
+
 - name: Check that hadoop is download
   stat:
     path: '{{ hdfs_folder }}/hadoop.tar.gz'
@@ -166,7 +205,7 @@
   become: yes
   when: not hadoop_directory_exists.stat.exists
 
-- name: Rename directory zookeeper
+- name: Rename directory hadoop
   shell: "mv /opt/{{ hadoop_package }} {{ hadoop_directory }}" 
   when: not hadoop_directory_exists.stat.exists
 
@@ -192,27 +231,6 @@
 
 - name: Source bash_profile of {{ user_name }}
   shell: source /home/{{ user_name }}/.bash_profile
- 
-- name: Create directory hadoopdata
-  file:
-    path: /opt/hadoop/hadoopdata
-    state: directory
-    owner: "{{ user_name }}"
-    group: "{{ group_name }}"
-
-- name: Create directory namenode
-  file:
-    path: /opt/hadoop/hadoopdata/namenode
-    state: directory
-    owner: "{{ user_name }}"
-    group: "{{ group_name }}"
-
-- name: Create directory datanode
-  file:
-    path: /opt/hadoop/hadoopdata/datanode
-    state: directory
-    owner: "{{ user_name }}"
-    group: "{{ group_name }}"
 
 - name: Copy necessary files
   template:
@@ -228,44 +246,94 @@
     - mapred-site.xml
     - slaves
 
-### INSTALL ZOOKEEPER
+##############################
+###### INSTALL ZOOKEEPER
+##############################
 - name: Check if zookeeper is downloaded
   local_action: stat path={{role_path}}/files/{{ zookeeper_package }}.tar.gz
   run_once: yes
   become: no
   register: zookeeper_file
+  when: inventory_hostname in groups['hdfszookeepers']
 
 - name: Download zookeper local
-  local_action: get_url url={{zookeper_download_url}} dest={{role_path}}/files/{{ zookeeper_package }}.tar.gz timeout=100
+  local_action: get_url url={{zookeeper_download_url}} dest={{role_path}}/files/{{ zookeeper_package }}.tar.gz timeout=100
   run_once: yes
   become: no
-  when: not zookeeper_file.stat.exists
+  when: not zookeeper_file.stat.exists and inventory_hostname in groups['hdfszookeepers']
   register: zookeeper_downloaded
 
 - name: Fail if zookeeper not found
   fail: msg="{{role_path}}/files/{{ zookeeper_package }}.tar.gz does NOT exist! Aborting..."
   run_once: yes
-  when: zookeeper_downloaded|failed
+  when: zookeeper_downloaded|failed and inventory_hostname in groups['hdfszookeepers']
 
 - name: Check if zookeeper directory exists
   stat:
     path: '{{ zookeeper_directory }}'
   register: zookeeper_directory_exists
+  when: inventory_hostname in groups['hdfszookeepers']
 
 - name: Unpack zookeeper
   unarchive: copy=yes src={{role_path}}/files/{{ zookeeper_package }}.tar.gz dest=/opt/
   become: yes
-  when: not zookeeper_directory_exists.stat.exists
+  when: not zookeeper_directory_exists.stat.exists and inventory_hostname in groups['hdfszookeepers']
 
 - name: Rename directory zookeeper
   shell: "mv /opt/{{ zookeeper_package }} {{ zookeeper_directory }}" 
+  when: not zookeeper_directory_exists.stat.exists 
+
+- name: Create directory data zookeper
+  file:
+    path: "{{ zookeeper_directory }}/data"
+    state: directory
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
   when: not zookeeper_directory_exists.stat.exists
 
+- name: Copy necessary files zookeper
+  template:
+    src: "{{ item }}.template"
+    dest: "{{ zookeeper_directory }}/conf/{{ item }}"
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
+  with_items:
+    - zoo.cfg
+    - myid
+  when: inventory_hostname in groups['hdfszookeepers']
+
+- name: Copy necessary files zookeper
+  template:
+    src: "{{ item }}.template"
+    dest: "{{ zookeeper_directory }}/data/{{ item }}"
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
+  with_items:
+    - myid
+  when: inventory_hostname in groups['hdfszookeepers']
+
+- name: Check if zookeeper is running
+  shell: ps aux | grep -i zookeeper | grep -v grep
+  ignore_errors: yes
+  changed_when: false
+  register: service_zookeeper_status
+  when: inventory_hostname in groups['hdfszookeepers']
+
+- name: Report status of zookeeper
+  shell: "{{ zookeeper_directory }}/bin/zkServer.sh start"
+  become: yes
+  when: service_zookeeper_status.rc != 0 and inventory_hostname in groups['hdfszookeepers']
+
+# hadoop-daemon.sh start journalnode
+#  become_user: "{{hadoop_user}}"
 
 # hdfs namenode -format
 # start-dfs.sh
 # start-yarn.sh
-#
+# <property>
+#  <name>dfs.namenode.shared.edits.dir</name>
+#  <value>qjournal://node1.example.com:8485;node2.example.com:8485;node3.example.com:8485/mycluster</value>
+# </property>
 # jps
 # localhost:50070
 # localhost:8088
