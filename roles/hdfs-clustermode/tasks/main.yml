@@ -1,236 +1,239 @@
-##############################
-###### ADD USER, ADD GROUP, CONFIGURE HOSTS, CONFIGURE SSH
-##############################
-- name: Add Group "{{group_name}}" group
-  group:
-    name: "{{group_name}}"
-    state: present
-    system: no
-
-- name: Create user "{{user_name}}"
-  user:
-    name: "{{user_name}}"
-    group: "{{group_name}}"
-    password: "{{user_password}}"
-    state: present
-
-- name: Add admin group to sudo
-  lineinfile: "dest=/etc/sudoers regexp='^%{{ group_name }}} ALL' line='%{{ group_name }} ALL=(ALL) NOPASSWD: ALL' state=present"
-
-- name: Build hosts file
-  lineinfile:
-    dest: /etc/hosts
-    regexp: '.*{{ item }}$'
-    line: "{{ hostvars[item]['ansible_eth1']['ipv4']['address'] }}   {{ hostvars[item]['ansible_hostname'] }}"
-    state: present
-  with_items: 
-    - '{{ groups["hdfsmasters"] }}'
-    - '{{ groups["hdfsslaves"] }}'
-
-- name: Generate ssh key for "{{ user_name }}"
-  user:
-    name: "{{ user_name }}"
-    generate_ssh_key: yes
-    ssh_key_bits: 2048
-    ssh_key_file: "/home/{{user_name}}/.ssh/id_rsa"
-
-- name: Create authorized_keys
-  file:
-    path: /home/{{ user_name }}/.ssh/authorized_keys
-    owner: "{{ user_name }}"
-    group: "{{ user_name }}"
-    state: touch
-    mode: 0644
-
-- name: Create authorized_keys
-  file:
-    path: /home/{{ user_name }}/.ssh/known_hosts
-    owner: "{{ user_name }}"
-    group: "{{ user_name }}"
-    state: touch
-    mode: 0644
-
-- name: Add generated ssh key to authorized_keys for {{ user_name }}
-  shell: cat /home/{{ user_name }}/.ssh/id_rsa.pub >> /home/{{ user_name }}/.ssh/authorized_keys
-  when: inventory_hostname in groups['hdfsmasters']
-
-- name: Add host to known_hosts
-  shell: ssh-keyscan -H 127.0.0.1 >> /home/{{ user_name }}/.ssh/known_hosts && ssh-keyscan -H localhost >> /home/{{ user_name }}/.ssh/known_hosts && ssh-keyscan -H 0.0.0.0 >> /home/{{ user_name }}/.ssh/known_hosts
-  when: inventory_hostname in groups['hdfsmasters']
-
-- name: fetch all public ssh keys
-  shell: cat /home/{{ user_name }}/.ssh/id_rsa.pub
-  register: ssh_keys
-  when: inventory_hostname in groups['hdfsmasters']
-
-- name: Deploy keys on all servers
-  authorized_key:
-    user: "{{user_name}}"
-    key: "{{item[0]}}"
-  delegate_to: "{{item[1]}}"
-  with_nested:
-    - "{{ssh_keys.stdout}}"
-    - "{{groups['hdfsslaves']}}"
-  when: inventory_hostname in groups['hdfsmasters']
-
-- name: Accept fingerprint
-  shell: ssh-keyscan -H {{item}} >> /home/{{ user_name }}/.ssh/known_hosts
-  become_user: "{{ user_name }}"
-  with_items: "{{groups['hdfsslaves']}} + {{groups['hdfsmasters']}}"
-
-##############################
-###### CREATE DIRECTORIES
-##############################
-- name: Create hdfs folder
-  file:
-    path: "{{hdfs_folder}}"
-    state: directory
-    owner: "{{ user_name }}"
-    group: "{{ group_name }}"
-    mode: 0775
-    recurse: yes
-- name: Create datanode folder
-  file:
-    path: "{{hdfs_folder}}"
-    state: directory
-    owner: "{{ user_name }}"
-    group: "{{ group_name }}"
-    mode: 0775
-    recurse: yes
-
-- name: Create namenode folder
-  file:
-    path: "{{hdfs_folder}}"
-    state: directory
-    owner: "{{ user_name }}"
-    group: "{{ group_name }}"
-    mode: 0775
-    recurse: yes
-
-- name: Create journalnode folder
-  file:
-    path: "{{hdfs_folder}}"
-    state: directory
-    owner: "{{ user_name }}"
-    group: "{{ group_name }}"
-    mode: 0775
-    recurse: yes
-
-##############################
-###### INSTALL NECCESARY PACKAGES
-##############################
-- name: Install packages
-  package:
-    name: "{{ item }}"
-    state: latest
-  with_items:
-    - wget
-    - rsync
-
-- name: Check that java is download
-  stat:
-    path: '/hdfs/jdk-8u151-linux-x64.rpm'
-  register: java_is_download
-
-- name: Ensure folder {{role_path}}/files/ exists
-  local_action: file path="{{role_path}}/files" state=directory
-  become: no
-
-- name: Check if Java Oracle is downloaded
-  local_action: stat path={{role_path}}/files/{{ java_rpm_name }}
-  run_once: yes
-  become: no
-  register: java_oracle_file
-
-- name: Download Java Oracle locally
-  local_action: "shell wget -O {{role_path}}/files/{{ java_rpm_name }} --no-cookies --no-check-certificate --header 'Cookie: gpw_e24=http%3A%2F%2Fwww.oracle.com%2F; oraclelicense=accept-securebackup-cookie' 'http://download.oracle.com/otn-pub/java/jdk/8u151-b12/e758a0de34e24606bca991d704f6dcbf/jdk-8u151-linux-x64.rpm'"
-  run_once: yes
-  become: no
-  when: not java_oracle_file.stat.exists
-
-- name: Check Java
-  shell: command -v java
-  register: check_java
-  ignore_errors: True
-
-- name: Copy Java rpm locally to server
-  copy:
-    src: ../files/{{ java_rpm_name }}
-    dest: /opt/
-    owner: "{{ user_name }}"
-    group: "{{ group_name}}"
-    mode: 0644
-  when: ansible_os_family == 'RedHat' and check_java.rc > 0
-
-- name: Install Java Oracle
-  yum:
-    name: "/opt/{{ java_rpm_name }}"
-    state: present
-  when: ansible_os_family == 'RedHat' and check_java.rc > 0
-
-##############################
-###### INSTALL HADOOP
-##############################
-
-- name: Check that hadoop is download
-  stat:
-    path: '{{ hdfs_folder }}/hadoop.tar.gz'
-  register: hadoop_is_download
-
-- name: Check if hadoop is downloaded
-  local_action: stat path={{role_path}}/files/{{ hadoop_package }}.tar.gz
-  run_once: yes
-  become: no
-  register: hadoop_file
-
-- name: Download hadoop local
-  local_action: get_url url={{ hadoop_download_url }} dest={{role_path}}/files/{{ hadoop_package }}.tar.gz timeout=100
-  run_once: yes
-  become: no
-  when: not hadoop_file.stat.exists
-  register: hadoop_downloaded
-
-- name: Fail if hadoop not found
-  fail: msg="{{role_path}}/files/{{ hadoop_package }}.tar.gz does NOT exist! Aborting..."
-  run_once: yes
-  when: hadoop_downloaded|failed
-
-- name: Check if hadoop directory exists
-  stat:
-    path: '{{ hadoop_directory }}'
-  register: hadoop_directory_exists
-
-- name: Unpack hadoop
-  unarchive: copy=yes src={{role_path}}/files/{{ hadoop_package }}.tar.gz dest=/opt/
-  become: yes
-  when: not hadoop_directory_exists.stat.exists
-
-- name: Rename directory hadoop
-  shell: "mv /opt/{{ hadoop_package }} {{ hadoop_directory }}" 
-  when: not hadoop_directory_exists.stat.exists
-
-- name: Register Java_home
-  stat:
-    path: /usr/java/jdk1.8.0_151/bin
-  register: java_home
-
-- blockinfile:
-    path: /home/{{ user_name }}/.bash_profile
-    content: |
-      export JAVA_HOME=/usr/java/jdk1.8.0_151/jre
-      export PATH=$PATH:$JAVA_HOME/bin
-      export CLASSPATH=.:$JAVA_HOME/jre/lib:$JAVA_HOME/lib:$JAVA_HOME/lib/tools.jar
-      export HADOOP_HOME=/opt/hadoop
-      export HADOOP_INSTALL=$HADOOP_HOME
-      export HADOOP_MAPRED_HOME=$HADOOP_HOME
-      export HADOOP_COMMON_HOME=$HADOOP_HOME
-      export HADOOP_HDFS_HOME=$HADOOP_HOME
-      export YARN_HOME=$HADOOP_HOME
-      export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
-      export PATH=$PATH:$HADOOP_HOME/sbin:$HADOOP_HOME/bin
-
-- name: Source bash_profile of {{ user_name }}
-  shell: source /home/{{ user_name }}/.bash_profile
+###############################
+####### ADD USER, ADD GROUP, CONFIGURE HOSTS, CONFIGURE SSH
+###############################
+#- name: Add Group "{{group_name}}" group
+#  group:
+#    name: "{{group_name}}"
+#    state: present
+#    system: no
+#
+#- name: Create user "{{user_name}}"
+#  user:
+#    name: "{{user_name}}"
+#    group: "{{group_name}}"
+#    password: "{{user_password}}"
+#    state: present
+#
+#- name: Add admin group to sudo
+#  lineinfile: "dest=/etc/sudoers regexp='^%{{ group_name }}} ALL' line='%{{ group_name }} ALL=(ALL) NOPASSWD: ALL' state=present"
+#
+#- name: Build hosts file
+#  lineinfile:
+#    dest: /etc/hosts
+#    regexp: '.*{{ item }}$'
+#    line: "{{ hostvars[item]['ansible_eth1']['ipv4']['address'] }}   {{ hostvars[item]['ansible_hostname'] }}"
+#    state: present
+#  with_items: 
+#    - '{{ groups["hdfsnamenodes"] }}'
+#    - '{{ groups["hdfsdatanodes"] }}'
+#    - '{{ groups["hdfsjournalnodes"] }}'
+#    - '{{ groups["hdfszookeepers"] }}'
+#
+#- name: Generate ssh key for "{{ user_name }}"
+#  user:
+#    name: "{{ user_name }}"
+#    generate_ssh_key: yes
+#    ssh_key_bits: 2048
+#    ssh_key_file: "/home/{{user_name}}/.ssh/id_rsa"
+#
+#- name: Create authorized_keys
+#  file:
+#    path: /home/{{ user_name }}/.ssh/authorized_keys
+#    owner: "{{ user_name }}"
+#    group: "{{ user_name }}"
+#    state: touch
+#    mode: 0644
+#
+#- name: Create authorized_keys
+#  file:
+#    path: /home/{{ user_name }}/.ssh/known_hosts
+#    owner: "{{ user_name }}"
+#    group: "{{ user_name }}"
+#    state: touch
+#    mode: 0644
+#
+#- name: Add generated ssh key to authorized_keys for {{ user_name }}
+#  shell: cat /home/{{ user_name }}/.ssh/id_rsa.pub >> /home/{{ user_name }}/.ssh/authorized_keys
+#  when: inventory_hostname in groups['hdfsnamenodes']
+#
+#- name: Add host to known_hosts
+#  shell: ssh-keyscan -H 127.0.0.1 >> /home/{{ user_name }}/.ssh/known_hosts && ssh-keyscan -H localhost >> /home/{{ user_name }}/.ssh/known_hosts && ssh-keyscan -H 0.0.0.0 >> /home/{{ user_name }}/.ssh/known_hosts
+#  when: inventory_hostname in groups['hdfsnamenodes']
+#
+#- name: fetch all public ssh keys
+#  shell: cat /home/{{ user_name }}/.ssh/id_rsa.pub
+#  register: ssh_keys
+#  when: inventory_hostname in groups['hdfsnamenodes']
+#
+#- name: Deploy keys on all servers
+#  authorized_key:
+#    user: "{{user_name}}"
+#    key: "{{item[0]}}"
+#  delegate_to: "{{item[1]}}"
+#  with_nested:
+#    - "{{ssh_keys.stdout}}"
+#    - "{{groups['hdfsdatanodes']}} + {{groups['hdfsjournalnodes']}} + {{groups['hdfszookeepers']}}"
+#  when: inventory_hostname in groups['hdfsnamenodes']
+#
+#- name: Accept fingerprint
+#  shell: ssh-keyscan -H {{item}} >> /home/{{ user_name }}/.ssh/known_hosts
+#  become_user: "{{ user_name }}"
+#  with_items: "{{groups['hdfsnamenodes']}} + {{groups['hdfsdatanodes']}} + {{groups['hdfsjournalnodes']}} + {{groups['hdfszookeepers']}}"  
+#
+################################
+######## CREATE DIRECTORIES
+################################
+#- name: Create hdfs folder
+#  file:
+#    path: "{{hdfs_folder}}"
+#    state: directory
+#    owner: "{{ user_name }}"
+#    group: "{{ group_name }}"
+#    mode: 0775
+#    recurse: yes
+#  when: inventory_hostname in groups['hdfsnamenodes'] + groups['hdfsdatanodes'] + groups['hdfsjournalnodes']
+#
+#- name: Create datanode folder
+#  file:
+#    path: "{{datanode_directory}}"
+#    state: directory
+#    owner: "{{ user_name }}"
+#    group: "{{ group_name }}"
+#    mode: 0775
+#    recurse: yes
+#  when: inventory_hostname in groups['hdfsdatanodes']
+#
+#- name: Create namenode folder
+#  file:
+#    path: "{{namenode_directory}}"
+#    state: directory
+#    owner: "{{ user_name }}"
+#    group: "{{ group_name }}"
+#    mode: 0775
+#    recurse: yes
+#  when: inventory_hostname in groups['hdfsnamenodes']
+#
+#- name: Create journalnode folder
+#  file:
+#    path: "{{journalnode_directory}}"
+#    state: directory
+#    owner: "{{ user_name }}"
+#    group: "{{ group_name }}"
+#    mode: 0775
+#    recurse: yes
+#  when: inventory_hostname in groups['hdfsjournalnodes']
+#
+################################
+######## INSTALL NECCESARY PACKAGES
+################################
+#- name: Install packages
+#  package:
+#    name: "{{ item }}"
+#    state: latest
+#  with_items:
+#    - wget
+#    - rsync
+#
+#- name: Ensure folder {{role_path}}/files/ exists
+#  local_action: file path="{{role_path}}/files" state=directory
+#  run_once: yes
+#  become: no
+#
+#- name: Check if Java Oracle is downloaded
+#  local_action: stat path={{role_path}}/files/{{ java_rpm_name }}
+#  run_once: yes
+#  become: no
+#  register: java_oracle_file
+#
+#- name: Download Java Oracle locally
+#  local_action: "shell wget -O {{role_path}}/files/{{ java_rpm_name }} --no-cookies --no-check-certificate --header 'Cookie: gpw_e24=http%3A%2F%2Fwww.oracle.com%2F; oraclelicense=accept-securebackup-cookie' 'http://download.oracle.com/otn-pub/java/jdk/8u151-b12/e758a0de34e24606bca991d704f6dcbf/jdk-8u151-linux-x64.rpm'"
+#  run_once: yes
+#  become: no
+#  when: not java_oracle_file.stat.exists
+#
+#- name: Check Java
+#  shell: command -v java
+#  register: check_java
+#  ignore_errors: True
+#
+#- name: Copy Java rpm locally to server
+#  copy:
+#    src: ../files/{{ java_rpm_name }}
+#    dest: /opt/
+#    owner: "{{ user_name }}"
+#    group: "{{ group_name}}"
+#    mode: 0644
+#  when: check_java.rc > 0
+#
+#- name: Install Java Oracle
+#  yum:
+#    name: "/opt/{{ java_rpm_name }}"
+#    state: present
+#  when: check_java.rc > 0
+#
+################################
+######## INSTALL HADOOP
+################################
+#- name: Check if hadoop is downloaded
+#  local_action: stat path={{role_path}}/files/{{ hadoop_package }}.tar.gz
+#  run_once: yes
+#  become: no
+#  register: hadoop_file
+#  when: inventory_hostname in groups['hdfsnamenodes'] + groups['hdfsdatanodes'] + groups['hdfsjournalnodes']
+#
+#- name: Download hadoop local
+#  local_action: get_url url={{ hadoop_download_url }} dest={{role_path}}/files/{{ hadoop_package }}.tar.gz timeout=100
+#  run_once: yes
+#  become: no
+#  when: not hadoop_file.stat.exists and inventory_hostname in groups['hdfsnamenodes'] + groups['hdfsdatanodes'] + groups['hdfsjournalnodes']
+#  register: hadoop_downloaded
+#
+#- name: Fail if hadoop not found
+#  fail: msg="{{role_path}}/files/{{ hadoop_package }}.tar.gz does NOT exist! Aborting..."
+#  run_once: yes
+#  when: hadoop_downloaded|failed and inventory_hostname in groups['hdfsnamenodes'] + groups['hdfsdatanodes'] + groups['hdfsjournalnodes']
+#
+#- name: Check if hadoop directory exists
+#  stat:
+#    path: '{{ hadoop_directory }}'
+#  register: hadoop_directory_exists
+#  when: inventory_hostname in groups['hdfsnamenodes'] + groups['hdfsdatanodes'] + groups['hdfsjournalnodes']
+#
+#- name: Unpack hadoop
+#  unarchive: copy=yes src={{role_path}}/files/{{ hadoop_package }}.tar.gz dest=/opt/
+#  become: yes
+#  when: not hadoop_directory_exists.stat.exists and inventory_hostname in groups['hdfsnamenodes'] + groups['hdfsdatanodes'] + groups['hdfsjournalnodes']
+#
+#- name: Rename directory hadoop
+#  shell: "mv /opt/{{ hadoop_package }} {{ hadoop_directory }}" 
+#  when: not hadoop_directory_exists.stat.exists and inventory_hostname in groups['hdfsnamenodes'] + groups['hdfsdatanodes'] + groups['hdfsjournalnodes']
+#
+#- name: Register Java_home
+#  stat:
+#    path: /usr/java/jdk1.8.0_151/bin
+#  register: java_home
+#  when: inventory_hostname in groups['hdfsnamenodes'] + groups['hdfsdatanodes'] + groups['hdfsjournalnodes']
+#
+#- name: Add enviroment variables
+#  blockinfile:
+#    path: /home/{{ user_name }}/.bash_profile
+#    content: |
+#      export JAVA_HOME=/usr/java/jdk1.8.0_151/jre
+#      export PATH=$PATH:$JAVA_HOME/bin
+#      export CLASSPATH=.:$JAVA_HOME/jre/lib:$JAVA_HOME/lib:$JAVA_HOME/lib/tools.jar
+#      export HADOOP_HOME=/opt/hadoop
+#      export HADOOP_INSTALL=$HADOOP_HOME
+#      export HADOOP_MAPRED_HOME=$HADOOP_HOME
+#      export HADOOP_COMMON_HOME=$HADOOP_HOME
+#      export HADOOP_HDFS_HOME=$HADOOP_HOME
+#      export YARN_HOME=$HADOOP_HOME
+#      export HADOOP_COMMON_LIB_NATIVE_DIR=$HADOOP_HOME/lib/native
+#      export PATH=$PATH:$HADOOP_HOME/sbin:$HADOOP_HOME/bin
+#  when: inventory_hostname in groups['hdfsnamenodes'] + groups['hdfsdatanodes'] + groups['hdfsjournalnodes']
+#
+#- name: Source bash_profile of {{ user_name }}
+#  shell: source /home/{{ user_name }}/.bash_profile
+#  when: inventory_hostname in groups['hdfsnamenodes'] + groups['hdfsdatanodes'] + groups['hdfsjournalnodes']
 
 - name: Copy necessary files
   template:
@@ -245,97 +248,98 @@
     - yarn-site.xml
     - mapred-site.xml
     - slaves
+  when: inventory_hostname in groups['hdfsnamenodes'] + groups['hdfsdatanodes'] + groups['hdfsjournalnodes']
 
-##############################
-###### INSTALL ZOOKEEPER
-##############################
-- name: Check if zookeeper is downloaded
-  local_action: stat path={{role_path}}/files/{{ zookeeper_package }}.tar.gz
-  run_once: yes
-  become: no
-  register: zookeeper_file
-  when: inventory_hostname in groups['hdfszookeepers']
-
-- name: Download zookeper local
-  local_action: get_url url={{zookeeper_download_url}} dest={{role_path}}/files/{{ zookeeper_package }}.tar.gz timeout=100
-  run_once: yes
-  become: no
-  when: not zookeeper_file.stat.exists and inventory_hostname in groups['hdfszookeepers']
-  register: zookeeper_downloaded
-
-- name: Fail if zookeeper not found
-  fail: msg="{{role_path}}/files/{{ zookeeper_package }}.tar.gz does NOT exist! Aborting..."
-  run_once: yes
-  when: zookeeper_downloaded|failed and inventory_hostname in groups['hdfszookeepers']
-
-- name: Check if zookeeper directory exists
-  stat:
-    path: '{{ zookeeper_directory }}'
-  register: zookeeper_directory_exists
-  when: inventory_hostname in groups['hdfszookeepers']
-
-- name: Unpack zookeeper
-  unarchive: copy=yes src={{role_path}}/files/{{ zookeeper_package }}.tar.gz dest=/opt/
-  become: yes
-  when: not zookeeper_directory_exists.stat.exists and inventory_hostname in groups['hdfszookeepers']
-
-- name: Rename directory zookeeper
-  shell: "mv /opt/{{ zookeeper_package }} {{ zookeeper_directory }}" 
-  when: not zookeeper_directory_exists.stat.exists 
-
-- name: Create directory data zookeper
-  file:
-    path: "{{ zookeeper_directory }}/data"
-    state: directory
-    owner: "{{ user_name }}"
-    group: "{{ group_name }}"
-  when: not zookeeper_directory_exists.stat.exists
-
-- name: Copy necessary files zookeper
-  template:
-    src: "{{ item }}.template"
-    dest: "{{ zookeeper_directory }}/conf/{{ item }}"
-    owner: "{{ user_name }}"
-    group: "{{ group_name }}"
-  with_items:
-    - zoo.cfg
-    - myid
-  when: inventory_hostname in groups['hdfszookeepers']
-
-- name: Copy necessary files zookeper
-  template:
-    src: "{{ item }}.template"
-    dest: "{{ zookeeper_directory }}/data/{{ item }}"
-    owner: "{{ user_name }}"
-    group: "{{ group_name }}"
-  with_items:
-    - myid
-  when: inventory_hostname in groups['hdfszookeepers']
-
-- name: Check if zookeeper is running
-  shell: ps aux | grep -i zookeeper | grep -v grep
-  ignore_errors: yes
-  changed_when: false
-  register: service_zookeeper_status
-  when: inventory_hostname in groups['hdfszookeepers']
-
-- name: Report status of zookeeper
-  shell: "{{ zookeeper_directory }}/bin/zkServer.sh start"
-  become: yes
-  when: service_zookeeper_status.rc != 0 and inventory_hostname in groups['hdfszookeepers']
-
-# hadoop-daemon.sh start journalnode
-#  become_user: "{{hadoop_user}}"
-
-# hdfs namenode -format
-# start-dfs.sh
-# start-yarn.sh
-# <property>
-#  <name>dfs.namenode.shared.edits.dir</name>
-#  <value>qjournal://node1.example.com:8485;node2.example.com:8485;node3.example.com:8485/mycluster</value>
-# </property>
-# jps
-# localhost:50070
-# localhost:8088
-# 50075/datanode
-# 50070 namenode
+###############################
+####### INSTALL ZOOKEEPER
+###############################
+#- name: Check if zookeeper is downloaded
+#  local_action: stat path={{role_path}}/files/{{ zookeeper_package }}.tar.gz
+#  run_once: yes
+#  become: no
+#  register: zookeeper_file
+#  when: inventory_hostname in groups['hdfszookeepers']
+#
+#- name: Download zookeper local
+#  local_action: get_url url={{zookeeper_download_url}} dest={{role_path}}/files/{{ zookeeper_package }}.tar.gz timeout=100
+#  run_once: yes
+#  become: no
+#  when: not zookeeper_file.stat.exists and inventory_hostname in groups['hdfszookeepers']
+#  register: zookeeper_downloaded
+#
+#- name: Fail if zookeeper not found
+#  fail: msg="{{role_path}}/files/{{ zookeeper_package }}.tar.gz does NOT exist! Aborting..."
+#  run_once: yes
+#  when: zookeeper_downloaded|failed and inventory_hostname in groups['hdfszookeepers']
+#
+#- name: Check if zookeeper directory exists
+#  stat:
+#    path: '{{ zookeeper_directory }}'
+#  register: zookeeper_directory_exists
+#  when: inventory_hostname in groups['hdfszookeepers']
+#
+#- name: Unpack zookeeper
+#  unarchive: copy=yes src={{role_path}}/files/{{ zookeeper_package }}.tar.gz dest=/opt/
+#  become: yes
+#  when: not zookeeper_directory_exists.stat.exists and inventory_hostname in groups['hdfszookeepers']
+#
+#- name: Rename directory zookeeper
+#  shell: "mv /opt/{{ zookeeper_package }} {{ zookeeper_directory }}" 
+#  when: not zookeeper_directory_exists.stat.exists 
+#
+#- name: Create directory data zookeper
+#  file:
+#    path: "{{ zookeeper_directory }}/data"
+#    state: directory
+#    owner: "{{ user_name }}"
+#    group: "{{ group_name }}"
+#  when: not zookeeper_directory_exists.stat.exists
+#
+#- name: Copy necessary files zookeper
+#  template:
+#    src: "{{ item }}.template"
+#    dest: "{{ zookeeper_directory }}/conf/{{ item }}"
+#    owner: "{{ user_name }}"
+#    group: "{{ group_name }}"
+#  with_items:
+#    - zoo.cfg
+#    - myid
+#  when: inventory_hostname in groups['hdfszookeepers']
+#
+#- name: Copy necessary files zookeper
+#  template:
+#    src: "{{ item }}.template"
+#    dest: "{{ zookeeper_directory }}/data/{{ item }}"
+#    owner: "{{ user_name }}"
+#    group: "{{ group_name }}"
+#  with_items:
+#    - myid
+#  when: inventory_hostname in groups['hdfszookeepers']
+#
+#- name: Check if zookeeper is running
+#  shell: ps aux | grep -i zookeeper | grep -v grep
+#  ignore_errors: yes
+#  changed_when: false
+#  register: service_zookeeper_status
+#  when: inventory_hostname in groups['hdfszookeepers']
+#
+#- name: Report status of zookeeper
+#  shell: "{{ zookeeper_directory }}/bin/zkServer.sh start"
+#  become: yes
+#  when: service_zookeeper_status.rc != 0 and inventory_hostname in groups['hdfszookeepers']
+#
+## hadoop-daemon.sh start journalnode
+##  become_user: "{{hadoop_user}}"
+#
+## hdfs namenode -format
+## start-dfs.sh
+## start-yarn.sh
+## <property>
+##  <name>dfs.namenode.shared.edits.dir</name>
+##  <value>qjournal://node1.example.com:8485;node2.example.com:8485;node3.example.com:8485/mycluster</value>
+## </property>
+## jps
+## localhost:50070
+## localhost:8088
+## 50075/datanode
+## 50070 namenode

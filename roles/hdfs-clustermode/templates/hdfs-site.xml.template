@@ -17,12 +17,38 @@
 <!-- Put site-specific property overrides in this file. -->
 
 <configuration>
-	<property>
-		<name>dfs.namenode.name.dir</name>
-		<value>file:///opt/hadoop/hadoopdata/namenode</value>
-	</property>
-	<property>
-		<name>dfs.datanode.data.dir</name>
-		<value>file:///opt/hadoop/hadoopdata/datanode</value>
-	</property>
+  <property>
+    <name>dfs.nameservices</name>
+    <value>{{ name_hdfs_cluster }}</value>
+  </property>
+  {% if inventory_hostname in groups['hdfsnamenodes'] %}
+  <property>
+    <name>dfs.ha.namenodes.mycluster</name>
+    <value>{% for host in groups['hdfsnamenodes'] %}{% if not loop.last %}{{ hostvars[host]['ansible_hostname'] }},{% endif %}{% if loop.last %}{{ hostvars[host]['ansible_hostname'] }}{% endif %}{% endfor %}</value>
+  </property>
+  {% for host in groups ['hdfsnamenodes'] %}
+  <property>
+    <name>dfs.namenode.rpc-address.mycluster.{{ hostvars[host]['ansible_hostname'] }}</name>
+    <value>{{ hostvars[host]['ansible_hostname'] }}:8020</value>
+  </property>
+  {% endfor %}
+  {% for host in groups ['hdfsnamenodes'] %}
+  <property>
+    <name>dfs.namenode.http-address.mycluster.{{ hostvars[host]['ansible_hostname'] }}</name>
+    <value>{{ hostvars[host]['ansible_hostname'] }}:50070</value>
+  </property>
+  {% endfor %}
+  {% endif %}
+  {% if inventory_hostname in groups['hdfsdatanodes'] %}
+  <property>
+    <name>dfs.namenode.shared.edits.dir</name>
+    <value>qjournal://{% for host in groups ['hdfsjournalnodes'] %}{% if not loop.last %}{{ hostvars[host]['ansible_hostname'] }}:8485;{% endif %}{% if loop.last %}{{ hostvars[host]['ansible_hostname'] }}:8485{% endif %}{% endfor %}/mycluster</value>
+  </property>
+  <property>
+    <name>dfs.client.failover.proxy.provider.mycluster</name>
+    <value>org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider</value>
+  </property>
+  {% endif %}
 </configuration>
+
+<!-- https://hadoop.apache.org/docs/r2.4.1/hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithQJM.html -->

@@ -15,15 +15,9 @@
 -->
 
 <!-- Put site-specific property overrides in this file. -->
-
 <configuration>
-    {% for host in groups['hdfsmasters'] %}
-    {% if loop.first %}
     <property>
       <name>fs.defaultFS</name>
-      <value>hdfs://0.0.0.0:9000</value>
-    </property>
-    {% endif %}
-    {% endfor %}
-	
+      <value>hdfs://{{ name_hdfs_cluster }}:9000</value>
+    </property> 
 </configuration>

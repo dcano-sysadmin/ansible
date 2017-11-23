@@ -15,6 +15,7 @@ zookeeper_directory: "/opt/zookeeper"
 datanode_directory: "{{ hdfs_folder }}/datanode"
 namenode_directory: "{{ hdfs_folder }}/namenode"
 journalnode_directory: "{{ hdfs_folder }}/journalnode"
+name_hdfs_cluster: "mycluster"
 
 ##dfs_namenode_name_dir: "{{hdfs_data_dir}}/namenode"
 #  <property>
