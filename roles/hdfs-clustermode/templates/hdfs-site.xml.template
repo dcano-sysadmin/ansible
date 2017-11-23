@@ -26,6 +26,10 @@
     <name>dfs.ha.namenodes.mycluster</name>
     <value>{% for host in groups['hdfsnamenodes'] %}{% if not loop.last %}{{ hostvars[host]['ansible_hostname'] }},{% endif %}{% if loop.last %}{{ hostvars[host]['ansible_hostname'] }}{% endif %}{% endfor %}</value>
   </property>
+  <property>
+    <name>dfs.ha.automatic-failover.enabled</name>
+    <value>true</value>
+  </property>
   {% for host in groups ['hdfsnamenodes'] %}
   <property>
     <name>dfs.namenode.rpc-address.mycluster.{{ hostvars[host]['ansible_hostname'] }}</name>
@@ -45,10 +49,19 @@
     <value>qjournal://{% for host in groups ['hdfsjournalnodes'] %}{% if not loop.last %}{{ hostvars[host]['ansible_hostname'] }}:8485;{% endif %}{% if loop.last %}{{ hostvars[host]['ansible_hostname'] }}:8485{% endif %}{% endfor %}/mycluster</value>
   </property>
   <property>
+    <name>dfs.datanode.data.dir</name>
+    <value>file:///{{ datanode_directory }}</value>
+  </property>
+  <property>
     <name>dfs.client.failover.proxy.provider.mycluster</name>
     <value>org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider</value>
   </property>
   {% endif %}
+  {% if inventory_hostname in groups['hdfsjournalnodes'] %}
+  <property>
+    <name>dfs.journalnode.edits.dir</name>
+    <value>{{journalnode_directory }}</value>
+  </property>
+  {% endif %}
 </configuration>
-
 <!-- https://hadoop.apache.org/docs/r2.4.1/hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithQJM.html -->

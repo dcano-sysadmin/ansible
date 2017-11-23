@@ -253,81 +253,81 @@
 ###############################
 ####### INSTALL ZOOKEEPER
 ###############################
-#- name: Check if zookeeper is downloaded
-#  local_action: stat path={{role_path}}/files/{{ zookeeper_package }}.tar.gz
-#  run_once: yes
-#  become: no
-#  register: zookeeper_file
-#  when: inventory_hostname in groups['hdfszookeepers']
-#
-#- name: Download zookeper local
-#  local_action: get_url url={{zookeeper_download_url}} dest={{role_path}}/files/{{ zookeeper_package }}.tar.gz timeout=100
-#  run_once: yes
-#  become: no
-#  when: not zookeeper_file.stat.exists and inventory_hostname in groups['hdfszookeepers']
-#  register: zookeeper_downloaded
-#
-#- name: Fail if zookeeper not found
-#  fail: msg="{{role_path}}/files/{{ zookeeper_package }}.tar.gz does NOT exist! Aborting..."
-#  run_once: yes
-#  when: zookeeper_downloaded|failed and inventory_hostname in groups['hdfszookeepers']
-#
-#- name: Check if zookeeper directory exists
-#  stat:
-#    path: '{{ zookeeper_directory }}'
-#  register: zookeeper_directory_exists
-#  when: inventory_hostname in groups['hdfszookeepers']
-#
-#- name: Unpack zookeeper
-#  unarchive: copy=yes src={{role_path}}/files/{{ zookeeper_package }}.tar.gz dest=/opt/
-#  become: yes
-#  when: not zookeeper_directory_exists.stat.exists and inventory_hostname in groups['hdfszookeepers']
-#
-#- name: Rename directory zookeeper
-#  shell: "mv /opt/{{ zookeeper_package }} {{ zookeeper_directory }}" 
-#  when: not zookeeper_directory_exists.stat.exists 
-#
-#- name: Create directory data zookeper
-#  file:
-#    path: "{{ zookeeper_directory }}/data"
-#    state: directory
-#    owner: "{{ user_name }}"
-#    group: "{{ group_name }}"
-#  when: not zookeeper_directory_exists.stat.exists
-#
-#- name: Copy necessary files zookeper
-#  template:
-#    src: "{{ item }}.template"
-#    dest: "{{ zookeeper_directory }}/conf/{{ item }}"
-#    owner: "{{ user_name }}"
-#    group: "{{ group_name }}"
-#  with_items:
-#    - zoo.cfg
-#    - myid
-#  when: inventory_hostname in groups['hdfszookeepers']
-#
-#- name: Copy necessary files zookeper
-#  template:
-#    src: "{{ item }}.template"
-#    dest: "{{ zookeeper_directory }}/data/{{ item }}"
-#    owner: "{{ user_name }}"
-#    group: "{{ group_name }}"
-#  with_items:
-#    - myid
-#  when: inventory_hostname in groups['hdfszookeepers']
-#
-#- name: Check if zookeeper is running
-#  shell: ps aux | grep -i zookeeper | grep -v grep
-#  ignore_errors: yes
-#  changed_when: false
-#  register: service_zookeeper_status
-#  when: inventory_hostname in groups['hdfszookeepers']
-#
-#- name: Report status of zookeeper
-#  shell: "{{ zookeeper_directory }}/bin/zkServer.sh start"
-#  become: yes
-#  when: service_zookeeper_status.rc != 0 and inventory_hostname in groups['hdfszookeepers']
-#
+- name: Check if zookeeper is downloaded
+  local_action: stat path={{role_path}}/files/{{ zookeeper_package }}.tar.gz
+  run_once: yes
+  become: no
+  register: zookeeper_file
+  when: inventory_hostname in groups['hdfszookeepers']
+
+- name: Download zookeper local
+  local_action: get_url url={{zookeeper_download_url}} dest={{role_path}}/files/{{ zookeeper_package }}.tar.gz timeout=100
+  run_once: yes
+  become: no
+  when: not zookeeper_file.stat.exists and inventory_hostname in groups['hdfszookeepers']
+  register: zookeeper_downloaded
+
+- name: Fail if zookeeper not found
+  fail: msg="{{role_path}}/files/{{ zookeeper_package }}.tar.gz does NOT exist! Aborting..."
+  run_once: yes
+  when: zookeeper_downloaded|failed and inventory_hostname in groups['hdfszookeepers']
+
+- name: Check if zookeeper directory exists
+  stat:
+    path: '{{ zookeeper_directory }}'
+  register: zookeeper_directory_exists
+  when: inventory_hostname in groups['hdfszookeepers']
+
+- name: Unpack zookeeper
+  unarchive: copy=yes src={{role_path}}/files/{{ zookeeper_package }}.tar.gz dest=/opt/
+  when: not zookeeper_directory_exists.stat.exists and inventory_hostname in groups['hdfszookeepers']
+
+- name: Rename directory zookeeper
+  shell: "mv /opt/{{ zookeeper_package }} {{ zookeeper_directory }}" 
+  when: not zookeeper_directory_exists.stat.exists  and inventory_hostname in groups['hdfszookeepers']
+
+- name: Create directory data zookeper
+  file:
+    path: "{{ zookeeper_directory }}/data"
+    state: directory
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
+  when: not zookeeper_directory_exists.stat.exists and inventory_hostname in groups['hdfszookeepers']
+
+- name: Copy necessary files zookeper
+  template:
+    src: "{{ item }}.template"
+    dest: "{{ zookeeper_directory }}/conf/{{ item }}"
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
+  with_items:
+    - zoo.cfg
+    - myid
+  when: inventory_hostname in groups['hdfszookeepers']
+
+- name: Copy necessary files zookeper
+  template:
+    src: "{{ item }}.template"
+    dest: "{{ zookeeper_directory }}/data/{{ item }}"
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
+  with_items:
+    - myid
+  when: inventory_hostname in groups['hdfszookeepers']
+
+- name: Check if zookeeper is running
+  shell: ps aux | grep -i zookeeper | grep -v grep
+  ignore_errors: yes
+  changed_when: false
+  register: service_zookeeper_status
+  when: inventory_hostname in groups['hdfszookeepers']
+
+- name: Report status of zookeeper
+  shell: "{{ zookeeper_directory }}/bin/zkServer.sh start"
+  when: service_zookeeper_status.rc != 0 and inventory_hostname in groups['hdfszookeepers']
+
+
+
 ## hadoop-daemon.sh start journalnode
 ##  become_user: "{{hadoop_user}}"
 #

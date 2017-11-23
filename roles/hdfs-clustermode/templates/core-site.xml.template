@@ -16,8 +16,17 @@
 
 <!-- Put site-specific property overrides in this file. -->
 <configuration>
-    <property>
-      <name>fs.defaultFS</name>
-      <value>hdfs://{{ name_hdfs_cluster }}:9000</value>
-    </property> 
+  <property>
+    <name>fs.defaultFS</name>
+    <value>hdfs://{{ name_hdfs_cluster }}:9000</value>
+  </property> 
+
+ <property>
+   <name>ha.zookeeper.quorum</name>
+   <value>{% for host in groups ['hdfszookeepers'] %}{% if not loop.last %}{{ hostvars[host]['ansible_hostname'] }}:2181,{% endif %}{% if loop.last %}{{ hostvars[host]['ansible_hostname'] }}:2181{% endif %}{% endfor %}</value>
+ </property>
+
+{{ hostvars[host]['ansible_hostname'] }}
+{% endif %}
+
 </configuration>
