@@ -9,6 +9,7 @@ java_rpm_name: "jdk-8u151-linux-x64.rpm"
 hadoop_package: "hadoop-2.9.0"
 hadoop_download_url: "http://mirror.rise.ph/apache/hadoop/common/stable/{{ hadoop_package }}.tar.gz"
 hadoop_directory: "/opt/hadoop"
+hadoop_log_directory: "/opt/hadoop/logs"
 zookeeper_package: "zookeeper-3.4.10"
 zookeeper_download_url: "http://apache.rediris.es/zookeeper/stable/{{ zookeeper_package }}.tar.gz"
 zookeeper_directory: "/opt/zookeeper"
@@ -16,6 +17,9 @@ datanode_directory: "{{ hdfs_folder }}/datanode"
 namenode_directory: "{{ hdfs_folder }}/namenode"
 journalnode_directory: "{{ hdfs_folder }}/journalnode"
 name_hdfs_cluster: "mycluster"
+hdfs_tmp_directory: "{{hdfs_folder}}/tmp"
+listening_address: 0.0.0.0
+
 
 ##dfs_namenode_name_dir: "{{hdfs_data_dir}}/namenode"
 #  <property>
