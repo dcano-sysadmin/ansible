@@ -178,7 +178,7 @@
 - name: Stop running HDFS
   shell: "{{hadoop_directory}}/sbin/stop-dfs.sh"
   become_user: "{{user_name}}"
-  when: inventory_hostname in groups['hdfsnamenodes'] or inventory_hostname in groups['hdfsdatanodes']
+  when: inventory_hostname in groups['hdfsnamenodes']
   ignore_errors: yes
 
 - name: Clean journalnode directory
@@ -353,8 +353,13 @@
   register: service_zookeeper_status
   when: inventory_hostname in groups['hdfszookeepers']
 
+- name: Set Permissions zookeeper directory
+  shell: "chown -R {{ user_name }}:{{ group_name }} {{ zookeeper_directory }} && chown -R {{ user_name }}:{{ group_name }} {{ zookeeper_directory }}"
+  when: inventory_hostname in groups['hdfszookeepers']
+
 - name: Report status of zookeeper
   shell: "{{ zookeeper_directory }}/bin/zkServer.sh start"
+  become_user: "{{ user_name }}"
   when: service_zookeeper_status.rc != 0 and inventory_hostname in groups['hdfszookeepers']
 
 ###############################
@@ -390,6 +395,11 @@
   become_user: "{{ user_name }}"
   when: inventory_hostname == groups["hdfsnamenodes"][1]
 
+- name: Format ZKFC
+  shell: "{{ hadoop_directory }}/bin/hdfs zkfc -formatZK -nonInteractive -force"
+  become_user: "{{ user_name }}"
+  when: inventory_hostname in groups['hdfsnamenodes']
+
 - name: Start StandBy NameNode
   shell: "{{ hadoop_directory }}/sbin/hadoop-daemon.sh start namenode"
   become_user: "{{ user_name }}"
@@ -398,17 +408,21 @@
 - name: Start ZKFC
   shell: "{{ hadoop_directory }}/sbin/hadoop-daemon.sh start zkfc"
   become_user: "{{ user_name }}"
+  register: test
   when: inventory_hostname in groups['hdfsnamenodes']
-
+#
+#- name: Print output start
+#  debug: msg= "{{ test.stdout_lines }}"
+#
 - name: Start datanodes
   shell: "{{ hadoop_directory }}/sbin/hadoop-daemon.sh start datanode"
   become_user: "{{ user_name }}"
   when: inventory_hostname in groups['hdfsdatanodes']
 
-- name: Start HDFS NameNodes/DataNodes
-  shell: "{{hadoop_home}}/sbin/start-dfs.sh"
-  become_user: "{{hadoop_user}}"
-  when: not hdfs_ha and format_hdfs is defined and format_hdfs and inventory_hostname == groups["namenodes"][0]
+#- name: Start HDFS NameNodes/DataNodes
+#  shell: "{{hadoop_home}}/sbin/start-dfs.sh"
+#  become_user: "{{hadoop_user}}"
+#  when: inventory_hostname in groups["namenodes"][0]
 
 # hdfs namenode -format
 # hdfs zkfc -formatZK -nonInteractive -force
