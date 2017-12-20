@@ -1,0 +1,104 @@
+#follow next guide; https://gist.github.com/ashrithr/4767927948eca70845db
+###############################
+### INSTALL AND CONFIGURE NTPd
+###############################
+- name: Install NTPd
+  package:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - ntp
+
+- name: Stop NTPd service
+  service:
+    name: ntpd
+    state: stopped
+    enabled: yes
+
+- name: NTPDATE to NTP SERVER
+  shell: ntpdate 0.rhel.pool.ntp.org
+
+- name: Start NTPd service
+  service:
+    name: ntpd
+    state: started
+    enabled: yes
+
+- name: Enable NTPd
+  service:
+    name: ntpd
+    enabled: yes
+
+
+###############################
+### CLEAN OLD KERBEROS
+###############################
+- name: Stop kerberos services
+  service:
+    name: "krb5kdc"
+    state: stopped
+  ignore_errors: True
+
+- name: Destroy Kerberos database
+  shell: "kdb5_util -P 'cambiar' destroy -f"
+  ignore_errors: True
+
+- name: Remove kerberos files
+  file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - /etc/krb5.conf*
+    - /var/kerberos
+
+- name: Remove Kerberos packages
+  package:
+    name: "{{ item }}"
+    state: absent
+  with_items:
+    - krb5-server
+    - krb5-libs
+  ignore_errors: True
+
+###############################
+### INSTALL AND CONFIGURE KERBEROS
+###############################
+- name: Install Kerberos
+  package:
+    name: "{{ item }}"
+    state: latest
+  with_items:
+    - krb5-server
+    - krb5-libs
+
+- name: Copy krb5.conf
+  template:
+    src: "{{ item }}.j2"
+    dest: "/etc/{{ item }}"
+    owner: "kerberos"
+    group: "kerberos"
+  with_items:
+    - krb5.conf
+
+- name: Copy kdc.conf & kadm5.acl
+  template:
+    src: "{{ item }}.j2"
+    dest: "/var/kerberos/krb5kdc/{{ item }}"
+    owner: "kerberos"
+    group: "kerberos"
+  with_items:
+    - kdc.conf
+    - kadm5.acl
+
+- name: Create Kerberos database initial
+  shell: "kdb5_util -P 'cambiar' create -s"
+
+- name: Start kerberos services
+  service:
+    name: "krb5kdc.service"
+    state: started
+
+- name: Enable Kerberos
+  service:
+    name: "krb5kdc"
+    enabled: yes
