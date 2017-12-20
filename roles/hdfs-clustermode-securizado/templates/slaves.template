@@ -1,3 +1,0 @@
-{% for host in groups['hdfsdatanodes'] %}
-{{ hostvars[host].inventory_hostname }}
-{% endfor %}

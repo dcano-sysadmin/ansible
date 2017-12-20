@@ -81,18 +81,6 @@
   with_items: "{{groups['hdfsnamenodes']}} + {{groups['hdfsdatanodes']}} + {{groups['hdfsjournalnodes']}} + {{groups['hdfszookeepers']}}"  
 
 ###############################
-####### KERBEROS SECURIZATION
-###############################
-
-- name: Add kerberos to /etc/hosts
-  lineinfile:
-    dest: /etc/hosts
-    regexp: '^{{ kerberos_name }}'
-    line: "{{kerberos_ip}} {{kerberos_name}}"
-    state: present
-  when: kerberos_securize
-
-###############################
 ####### CREATE DIRECTORIES FOR HADOOP
 ###############################
 - name: Create hdfs folder

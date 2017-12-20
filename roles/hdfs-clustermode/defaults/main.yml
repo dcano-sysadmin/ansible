@@ -19,8 +19,3 @@ journalnode_directory: "{{ hdfs_folder }}/journalnode"
 name_hdfs_cluster: "mycluster"
 hdfs_tmp_directory: "{{hdfs_folder}}/tmp"
 listening_address: 0.0.0.0
-
-kerberos_securize: true
-kerberos_name: "kerberos.david.com"
-kerberos_ip: "192.192.192.192"
-kerberos_realm: PERFORMANCE.DAVID.COM

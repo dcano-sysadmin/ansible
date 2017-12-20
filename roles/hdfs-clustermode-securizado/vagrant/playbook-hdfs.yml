@@ -1,6 +1,0 @@
----
-# example playbook exporter
-- hosts: all
-  become: true
-  roles:
-    - hdfs-clustermode
