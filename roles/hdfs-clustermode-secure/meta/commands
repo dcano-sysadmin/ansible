@@ -1,0 +1,35 @@
+kadmin.local
+xst -k hdfs-unmerged.keytab hdfs/hdfs1.david.com@DAVID.COM
+xst -k http.keytab HTTP/hdfs1.david.com@DAVID.COM
+
+ktutil
+rkt hdfs-unmerged.keytab
+rkt http.keytab
+wkt hdfs.keytab
+clear
+
+
+
+
+kadmin.local
+xst -k hdfs-unmerged.keytab hdfs/hdfs2.david.com@DAVID.COM
+xst -k http.keytab HTTP/hdfs2.david.com@DAVID.COM
+
+ktutil
+rkt hdfs-unmerged.keytab
+rkt http.keytab
+wkt hdfs.keytab
+clear
+
+
+
+kadmin.local
+xst -k hdfs-unmerged.keytab hdfs/hdfs3.david.com@DAVID.COM
+xst -k http.keytab HTTP/hdfs3.david.com@DAVID.COM
+
+ktutil
+rkt hdfs-unmerged.keytab
+rkt http.keytab
+ 
+clear
+

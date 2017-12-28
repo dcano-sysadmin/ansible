@@ -1,7 +1,7 @@
 ---
 # defaults file for hdfs-singlemode
-user_name: "hadoop"
-group_name: "hadoop"
+user_name: "hdfs"
+group_name: "hdfs"
 user_password: "hadoop"
 hdfs_folder: "/hdfs"
 java_download_url: "http://javadl.oracle.com/webapps/download/AutoDL?BundleId=227541_e758a0de34e24606bca991d704f6dcbf"
@@ -16,11 +16,23 @@ zookeeper_directory: "/opt/zookeeper"
 datanode_directory: "{{ hdfs_folder }}/datanode"
 namenode_directory: "{{ hdfs_folder }}/namenode"
 journalnode_directory: "{{ hdfs_folder }}/journalnode"
+keytab_directory: "{{ hdfs_folder }}/keytab"
 name_hdfs_cluster: "mycluster"
 hdfs_tmp_directory: "{{hdfs_folder}}/tmp"
 listening_address: 0.0.0.0
+domain: "david.com"
+http_cookie_domain: "{{ domain }}"
+http_signature_secret_file: http.signature
 
 kerberos_securize: true
-kerberos_name: "kerberos.david.com"
-kerberos_ip: "192.192.192.192"
-kerberos_realm: PERFORMANCE.DAVID.COM
+kerberos_name: "kerberos"
+kerberos_ip: "172.19.1.190"
+kerberos_realm: DAVID.COM
+
+ssl_client_truststore_reload_interval: 10000
+ssl_server_truststore_reload_interval: 10000
+
+hadoop_keystore_file: "{{ansible_hostname}}.keystore"
+truststore_file: david.truststore
+http_signature_secret_file: http.signature
+stores_password: dqd231123sdaedq313d123d312

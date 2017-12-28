@@ -1,4 +1,21 @@
 #follow next guide; https://gist.github.com/ashrithr/4767927948eca70845db
+#explain kerberos; http://www.roguelynn.com/words/explain-like-im-5-kerberos/
+#https://www.eduonix.com/blog/bigdata-and-hadoop/learn-secure-hadoop-cluster-using-kerberos-part-1/
+
+- name: DISABLE SELINUX
+  selinux:
+    state: disabled
+
+###############################
+### BASIC MACHINE CONFIGURATION
+###############################
+- name: Build hosts file
+  lineinfile:
+    dest: /etc/hosts
+    regexp: '.*{{ kerberos_hostname }}$'
+    line: "{{ kerberos_ip }} {{ kerberos_hostname }} {{ kerberos_hostname }}.{{ kerberos_realm }}"
+    state: present
+
 ###############################
 ### INSTALL AND CONFIGURE NTPd
 ###############################
@@ -58,10 +75,11 @@
   with_items:
     - krb5-server
     - krb5-libs
+    - krb5-workstation
   ignore_errors: True
 
 ###############################
-### INSTALL AND CONFIGURE KERBEROS
+### INSTALL AND CONFIGURATION FILES KERBEROS
 ###############################
 - name: Install Kerberos
   package:
@@ -70,13 +88,12 @@
   with_items:
     - krb5-server
     - krb5-libs
+    - krb5-workstation
 
 - name: Copy krb5.conf
   template:
     src: "{{ item }}.j2"
     dest: "/etc/{{ item }}"
-    owner: "kerberos"
-    group: "kerberos"
   with_items:
     - krb5.conf
 
@@ -84,21 +101,103 @@
   template:
     src: "{{ item }}.j2"
     dest: "/var/kerberos/krb5kdc/{{ item }}"
-    owner: "kerberos"
-    group: "kerberos"
   with_items:
     - kdc.conf
     - kadm5.acl
 
+###############################
+### CONFIGURE KERBEROS
+###############################
+
 - name: Create Kerberos database initial
-  shell: "kdb5_util -P 'cambiar' create -s"
+  shell: "kdb5_util -P '{{ kadmin_password }}' create -s"
+
+- name: Create an admin user for the administering the kerberos database
+  shell: kadmin.local -q "addprinc -pw {{ kadmin_password }} {{ kadmin_user }}/admin"; touch /var/kerberos/admin_created creates=/var/kerberos/admin_created
+
+- name: Create principal hdfs
+  shell: kadmin.local -q "addprinc -randkey hdfs/hdfs1.david.com@{{ kerberos_realm |upper() }}"
+
+- name: Create principal hdfs
+  shell: kadmin.local -q "addprinc -randkey HTTP/hdfs1.david.com@{{ kerberos_realm |upper() }}"
+
+- name: Create principal hdfs
+  shell: kadmin.local -q "addprinc -randkey hdfs/hdfs2.david.com@{{ kerberos_realm |upper() }}"
+
+- name: Create principal hdfs
+  shell: kadmin.local -q "addprinc -randkey HTTP/hdfs2.david.com@{{ kerberos_realm |upper() }}"
+
+- name: Create principal hdfs
+  shell: kadmin.local -q "addprinc -randkey hdfs/hdfs3.david.com@{{ kerberos_realm |upper() }}"
+
+- name: Create principal hdfs
+  shell: kadmin.local -q "addprinc -randkey HTTP/hdfs3.david.com@{{ kerberos_realm |upper() }}"
+
+- name: Get all keytabs of /etc/
+  find:
+    paths: /etc/
+    patterns: "*.keytab"
+  register: keytabs_to_delete
+
+- name: Remove all keytabs of /etc/
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  with_items: "{{ keytabs_to_delete.files }}"
+
+- name: Create keytab
+  shell: kadmin.local -q "xst -k /etc/{{ kerberos_realm |upper() }}.keytab hdfs/hdfs1.david.com@{{ kerberos_realm |upper() }}"
+
+- name: Create keytab
+  shell: kadmin.local -q "xst -k /etc/{{ kerberos_realm |upper() }}.keytab HTTP/hdfs1.david.com@{{ kerberos_realm |upper() }}"
+
+- name: Create keytab
+  shell: kadmin.local -q "xst -k /etc/{{ kerberos_realm |upper() }}.keytab hdfs/hdfs2.david.com@{{ kerberos_realm |upper() }}"
+
+- name: Create keytab
+  shell: kadmin.local -q "xst -k /etc/{{ kerberos_realm |upper() }}.keytab HTTP/hdfs2.david.com@{{ kerberos_realm |upper() }}"
+
+- name: Create keytab
+  shell: kadmin.local -q "xst -k /etc/{{ kerberos_realm |upper() }}.keytab hdfs/hdfs3.david.com@{{ kerberos_realm |upper() }}"
+
+- name: Create keytab
+  shell: kadmin.local -q "xst -k /etc/{{ kerberos_realm |upper() }}.keytab HTTP/hdfs3.david.com@{{ kerberos_realm |upper() }}"
+
+- fetch:
+    src: '/etc/{{ kerberos_realm |upper() }}.keytab'
+    dest: '{{role_path}}/../hdfs-clustermode-secure/files/'
+    flat: yes
+
+#- name: Merge keytab
+#  shell: "echo 'rkt /etc/hdfs-unmerged.keytab' | ktutil"
+#
+#- name: Merge keytab
+#  shell: "echo 'rkt /etc/http.keytab' | ktutil"
+#
+#- name: Merge keytab
+#  shell: "echo 'wkt /etc/hdfs.keytab' | ktutil"
+#
+#- name: Merge keytab
+#  shell: "clear"
+#
+#- name: Create keytab nn1 hdfs
+#  shell: kadmin.local -q "xst -k nn1.keytab nn1/{{ kerberos_hostname }}@{{ kerberos_realm |upper() }}"
+#  
+#- name: Create principal hdfs
+#  shell: kadmin.local -q "ktadd hdfs/{{ kerberos_hostname }}@{{ kerberos_realm |upper() }}"
+
+###############################
+### LAUNCH KERBEROS
+###############################
 
 - name: Start kerberos services
   service:
-    name: "krb5kdc.service"
+    name: "krb5kdc"
     state: started
 
 - name: Enable Kerberos
   service:
     name: "krb5kdc"
     enabled: yes
+
+# xst -k hdfs.keytab hdfs/kerberos@DAVID.COM

@@ -1,3 +1,14 @@
+#read;  https://steveloughran.gitbooks.io/kerberos_and_hadoop/content/sections/what_is_kerberos.html
+#       https://www.eduonix.com/blog/bigdata-and-hadoop/learn-secure-hadoop-cluster-using-kerberos-part-1/
+#intersante: https://www.cloudera.com/documentation/enterprise/latest/topics/cm_sg_principal_keytab.html 
+# kinit hdfs/slave-1.asgard.com@ASGARD.COM -k -t /etc/security/hdfs.service.keytab
+#commands; https://www.cloudera.com/documentation/enterprise/latest/topics/cdh_sg_kerberos_prin_keytab_deploy.html
+# https; https://es.hortonworks.com/blog/deploying-https-hdfs/
+
+- name: DISABLE SELINUX
+  selinux:
+    state: disabled
+
 ###############################
 ####### ADD USER, ADD GROUP, CONFIGURE HOSTS, CONFIGURE SSH
 ###############################
@@ -21,7 +32,7 @@
   lineinfile:
     dest: /etc/hosts
     regexp: '.*{{ item }}$'
-    line: "{{ hostvars[item]['ansible_eth1']['ipv4']['address'] }}   {{ hostvars[item]['ansible_hostname'] }}"
+    line: "{{ hostvars[item]['ansible_eth1']['ipv4']['address'] }} {{ hostvars[item]['ansible_hostname'] }}.{{ domain }} {{ hostvars[item]['ansible_hostname'] }}"
     state: present
   with_items: 
     - '{{ groups["hdfsnamenodes"] }}'
@@ -88,9 +99,25 @@
   lineinfile:
     dest: /etc/hosts
     regexp: '^{{ kerberos_name }}'
-    line: "{{kerberos_ip}} {{kerberos_name}}"
+    line: "{{kerberos_ip}}  {{ kerberos_name }}.{{ kerberos_realm|lower() }} {{ kerberos_name }}"
     state: present
-  when: kerberos_securize
+
+- name: Install krb5 neccesary packages
+  package:
+    name: "{{item}}"
+    state: latest
+  with_items:
+    - krb5-workstation.x86_64
+    - psmisc
+
+- name: Copy necessary files
+  template:
+    src: "{{ item }}.template"
+    dest: "/etc/{{ item }}"
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
+  with_items:
+    - krb5.conf
 
 ###############################
 ####### CREATE DIRECTORIES FOR HADOOP
@@ -98,6 +125,16 @@
 - name: Create hdfs folder
   file:
     path: "{{hdfs_folder}}"
+    state: directory
+    owner: "{{ user_name }}"
+    group: "{{ group_name }}"
+    mode: 0775
+    recurse: yes
+  when: inventory_hostname in groups['hdfsnamenodes'] + groups['hdfsdatanodes'] + groups['hdfsjournalnodes']
+
+- name: Create hdfs keytab folder
+  file:
+    path: "{{ keytab_directory }}"
     state: directory
     owner: "{{ user_name }}"
     group: "{{ group_name }}"
@@ -187,11 +224,11 @@
 ####### STOP AND CLEAN HADOOP IF IT IS NECESSARY
 ###############################
 
-- name: Stop running HDFS
-  shell: "{{hadoop_directory}}/sbin/stop-dfs.sh"
-  become_user: "{{user_name}}"
-  when: inventory_hostname in groups['hdfsnamenodes']
-  ignore_errors: yes
+#- name: Stop running HDFS
+#  shell: "{{hadoop_directory}}/sbin/stop-dfs.sh"
+#  become_user: "{{user_name}}"
+#  when: inventory_hostname in groups['hdfsnamenodes']
+#  ignore_errors: yes
 
 - name: Clean journalnode directory
   shell: find "{{journalnode_directory}}" -mindepth 1 -maxdepth 1 -exec rm -fr {} \;
@@ -283,6 +320,8 @@
     - yarn-site.xml
     - mapred-site.xml
     - slaves
+    - ssl-client.xml
+    - ssl-server.xml
   when: inventory_hostname in groups['hdfsnamenodes'] + groups['hdfsdatanodes'] + groups['hdfsjournalnodes']
 
 - name: Create hadoop logs directory
@@ -292,6 +331,14 @@
     owner: "{{ user_name }}"
     group: "{{ group_name }}"
   when: inventory_hostname in groups['hdfsnamenodes'] + groups['hdfsdatanodes'] + groups['hdfsjournalnodes']
+
+- name: Copy keytab
+  copy:
+    src: ../files/DAVID.COM.keytab
+    dest: "{{ keytab_directory }}"
+    owner: "{{ user_name }}"
+    group: "{{ group_name}}"
+    mode: 0644
 
 ###############################
 ####### INSTALL  & RUN ZOOKEEPER

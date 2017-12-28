@@ -1,0 +1,20 @@
+[libdefaults]
+ default_realm = DAVID.COM
+ dns_lookup_realm = false
+ dns_lookup_kdc = false
+ rdns = false
+ ticket_lifetime = 24h
+ renew_lifetime = 7d
+ forwardable = true
+ proxiable = true
+ default_ccache_name = FILE:/tmp/krb5cc_%{uid}
+
+[realms]
+ DAVID.COM = {
+  kdc = kerberos.david.com
+  admin_server = kerberos.david.com
+ }
+
+[domain_realm]
+ .david.com = DAVID.COM
+ david.com = DAVID.COM

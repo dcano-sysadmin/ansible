@@ -21,52 +21,10 @@
     <name>dfs.nameservices</name>
     <value>{{ name_hdfs_cluster }}</value>
   </property>
-  {% if inventory_hostname in groups['hdfsnamenodes'] %}
-  <property>
-    <name>dfs.ha.namenodes.mycluster</name>
-    <value>{% for host in groups['hdfsnamenodes'] %}{% if not loop.last %}{{ hostvars[host]['ansible_hostname'] }},{% endif %}{% if loop.last %}{{ hostvars[host]['ansible_hostname'] }}{% endif %}{% endfor %}</value>
-  </property>
   <property>
     <name>dfs.ha.automatic-failover.enabled</name>
     <value>true</value>
   </property>
-  {% for host in groups ['hdfsnamenodes'] %}
-  <property>
-    <name>dfs.namenode.rpc-address.mycluster.{{ hostvars[host]['ansible_hostname'] }}</name>
-    <value>{{ hostvars[host]['ansible_hostname'] }}:8020</value>
-  </property>
-  {% endfor %}
-  {% for host in groups ['hdfsnamenodes'] %}
-  <property>
-    <name>dfs.namenode.http-address.mycluster.{{ hostvars[host]['ansible_hostname'] }}</name>
-    <value>{{ hostvars[host]['ansible_hostname'] }}:50070</value>
-  </property>
-  {% endfor %}
-  <property>
-    <name>dfs.namenode.shared.edits.dir</name>
-    <value>qjournal://{% for host in groups ['hdfsjournalnodes'] %}{% if not loop.last %}{{ hostvars[host]['ansible_hostname'] }}:8485;{% endif %}{% if loop.last %}{{ hostvars[host]['ansible_hostname'] }}:8485{% endif %}{% endfor %}/mycluster</value>
-  </property>
-  {% endif %}
-  {% if inventory_hostname in groups['hdfsdatanodes'] %}
-  <property>
-    <name>dfs.namenode.shared.edits.dir</name>
-    <value>qjournal://{% for host in groups ['hdfsjournalnodes'] %}{% if not loop.last %}{{ hostvars[host]['ansible_hostname'] }}:8485;{% endif %}{% if loop.last %}{{ hostvars[host]['ansible_hostname'] }}:8485{% endif %}{% endfor %}/mycluster</value>
-  </property>
-  <property>
-    <name>dfs.datanode.data.dir</name>
-    <value>file:///{{ datanode_directory }}</value>
-  </property>
-  <property>
-    <name>dfs.client.failover.proxy.provider.mycluster</name>
-    <value>org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider</value>
-  </property>
-  {% endif %}
-  {% if inventory_hostname in groups['hdfsjournalnodes'] %}
-  <property>
-    <name>dfs.journalnode.edits.dir</name>
-    <value>{{journalnode_directory }}</value>
-  </property>
-  {% endif %}
   <property>
     <name>dfs.ha.fencing.methods</name>
     <value>sshfence</value>
@@ -75,21 +33,87 @@
     <name>dfs.ha.fencing.ssh.private-key-files</name>
     <value>/home/{{user_name}}/.ssh/id_rsa</value>
   </property>
+  {% if inventory_hostname in groups['hdfsnamenodes'] %}
   <property>
-    <name>dfs.replication</name>
-    <value>3</value>
+    <name>dfs.ha.namenodes.{{ name_hdfs_cluster }}</name>
+    <value>{% for host in groups['hdfsnamenodes'] %}{% if not loop.last %}{{ hostvars[host]['ansible_hostname'] }},{% endif %}{% if loop.last %}{{ hostvars[host]['ansible_hostname'] }}{% endif %}{% endfor %}</value>
+  </property>
+  {% for host in groups ['hdfsnamenodes'] %}
+  <property>
+    <name>dfs.namenode.rpc-address.{{ name_hdfs_cluster }}.{{ hostvars[host]['ansible_hostname'] }}</name>
+    <value>{{ hostvars[host]['ansible_hostname'] }}:8020</value>
+  </property>
+  {% endfor %}
+  {% for host in groups ['hdfsnamenodes'] %}
+  <property>
+    <name>dfs.namenode.http-address.{{ name_hdfs_cluster }}.{{ hostvars[host]['ansible_hostname'] }}</name>
+    <value>{{ hostvars[host]['ansible_hostname'] }}:50070</value>
+  </property>
+  {% endfor %}
+  <property>
+    <name>dfs.namenode.shared.edits.dir</name>
+    <value>qjournal://{% for host in groups ['hdfsjournalnodes'] %}{% if not loop.last %}{{ hostvars[host]['ansible_hostname'] }}.david.com:8485;{% endif %}{% if loop.last %}{{ hostvars[host]['ansible_hostname'] }}.david.com:8485{% endif %}{% endfor %}/{{ name_hdfs_cluster }}</value>
+  </property>
+  {% endif %}
+  {% if inventory_hostname in groups['hdfsdatanodes'] %}
+  <property>
+    <name>dfs.namenode.shared.edits.dir</name>
+    <value>qjournal://{% for host in groups ['hdfsjournalnodes'] %}{% if not loop.last %}{{ hostvars[host]['ansible_hostname'] }}:8485;{% endif %}{% if loop.last %}{{ hostvars[host]['ansible_hostname'] }}:8485{% endif %}{% endfor %}/{{ name_hdfs_cluster }}</value>
   </property>
   <property>
-    <name>dfs.permissions.enabled</name>
-    <value>true</value>
+    <name>dfs.client.failover.proxy.provider.{{ name_hdfs_cluster }}</name>
+    <value>org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider</value>
   </property>
-  <property>
+    <property>
     <name>dfs.namenode.name.dir</name>
     <value>{{ namenode_directory }}</value>
   </property>
   <property>
     <name>dfs.datanode.data.dir</name>
     <value>{{ datanode_directory }}</value>
+  </property>
+  <property>
+    <name>dfs.permissions.enabled</name>
+    <value>true</value>
+  </property>
+  {% endif %}
+  {% if inventory_hostname in groups['hdfsjournalnodes'] %}
+  <property>
+    <name>dfs.journalnode.edits.dir</name>
+    <value>{{ journalnode_directory }}</value>
+  </property>
+  {% endif %}
+  <property>
+    <name>dfs.replication</name>
+    <value>3</value>
+  </property>
+  <property>
+    <name>dfs.block.access.token.enable</name>
+    <value>true</value>
+  </property>
+  <property>
+    <name>dfs.http.policy</name>
+    <value>HTTPS_ONLY</value>
+  </property>
+  <property>
+    <name>dfs.namenode.keytab.file</name>
+    <value>{{ keytab_directory }}/{{ kerberos_realm }}.keytab</value>
+  </property>
+ <property>
+    <name>dfs.namenode.kerberos.principal</name>
+    <value>hdfs/{{ansible_hostname}}.david.com@{{ kerberos_realm }}</value>
+  </property>
+  <property>
+    <name>dfs.namenode.kerberos.internal.spnego.principal</name>
+    <value>HTTP/{{ansible_hostname}}.david.com@{{ kerberos_realm }}</value>
+  </property>
+  <property>
+    <name>dfs.namenode.kerberos.internal.spnego.keytab</name>
+    <value>{{ keytab_directory }}/{{ kerberos_realm }}.keytab</value>
+  </property>
+  <property>
+    <name>dfs.encrypt.data.transfer</name>
+    <value>true</value>
   </property>
   <property>
     <name>dfs.datanode.address</name>
@@ -100,8 +124,40 @@
     <value>{{ listening_address }}:10006</value>
   </property>
   <property>
-    <name>dfs.client.failover.proxy.provider.{{ name_hdfs_cluster }}</name>
-    <value>org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider</value>
+    <name>dfs.data.transfer.protection</name>
+    <value>authentication</value>
+  </property>
+  <property>
+    <name>dfs.datanode.keytab.file</name>
+    <value>{{ keytab_directory }}/{{ kerberos_realm }}.keytab</value>
+  </property>
+  <property>
+    <name>dfs.datanode.kerberos.principal</name>
+    <value>hdfs/{{ansible_hostname}}.david.com@{{ kerberos_realm }}</value>
+  </property>
+  <property>
+    <name>dfs.journalnode.edits.dir</name>
+    <value>{{ journalnode_directory }}</value>
+  </property>
+ <property>
+    <name>dfs.journalnode.keytab.file</name>
+    <value>{{ keytab_directory }}/{{ kerberos_realm }}.keytab</value>
+  </property>
+  <property>
+    <name>dfs.journalnode.kerberos.principal</name>
+    <value>hdfs/{{ansible_hostname}}.david.com@{{ kerberos_realm }}</value>
+  </property>
+  <property>
+    <name>dfs.journalnode.kerberos.internal.spnego.principal</name>
+    <value>HTTP/{{ansible_hostname}}.david.com@{{ kerberos_realm }}</value>
+  </property>
+  <property>
+    <name>dfs.web.authentication.kerberos.keytab</name>
+    <value>{{ keytab_directory }}/{{ kerberos_realm }}.keytab</value>
+  </property>
+  <property>
+    <name>dfs.web.authentication.kerberos.principal</name>
+    <value>HTTP/{{ansible_hostname}}.david.com@{{ kerberos_realm }}</value>
   </property>
 </configuration>
 <!-- https://hadoop.apache.org/docs/r2.4.1/hadoop-project-dist/hadoop-hdfs/HDFSHighAvailabilityWithQJM.html -->
