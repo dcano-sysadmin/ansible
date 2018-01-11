@@ -35,4 +35,6 @@ ssl_server_truststore_reload_interval: 10000
 hadoop_keystore_file: "{{ansible_hostname}}.keystore"
 truststore_file: david.truststore
 http_signature_secret_file: http.signature
+http_keystore_secret_password: keystorepassword
 stores_password: dqd231123sdaedq313d123d312
+ca_password: capassword

@@ -220,6 +220,20 @@
     state: present
   when: check_java.rc > 0
 
+## NECCESARY TO SSL
+- name: Check that keystore file exists
+  stat:
+    path: "{{ keytab_directory }}/{{ hadoop_keystore_file }}"
+  register: keytab_file
+
+- name: Generate keystore
+  shell: "keytool -genkey -noprompt -alias {{ ansible_hostname }} -dname \"CN={{ ansible_hostname }}.{{ domain }}, OU=DavidOrganization, O=DavidOrganization, L=Madrid, S=Madrid, C=ES\" -keystore {{ keytab_directory }}/{{ hadoop_keystore_file }} -storepass {{ http_keystore_secret_password }} -keypass {{ http_keystore_secret_password }}"
+  when: keytab_file.stat.exists == False
+
+- name: Generate CA
+  shell: "openssl req -subj '/CN=domain.com/O=My Company Name LTD./C=US' -new -x509 -keyout {{ keytab_directory }}/ca.key -out {{ keytab_directory }}/ca.crt -days 365 -passout pass:\"{{ ca_password }}\""
+  when: inventory_hostname == groups["hdfsnamenodes"][0]
+
 ###############################
 ####### STOP AND CLEAN HADOOP IF IT IS NECESSARY
 ###############################
